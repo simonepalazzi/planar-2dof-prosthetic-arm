@@ -1,0 +1,212 @@
+"""
+=============================================================
+Planar 2-DOF Robot Arm Control via Differential Kinematics
+=============================================================
+Approximate model of a 2-segment prosthetic limb
+(forearm + hand) reaching a target point in 2D space.
+
+The arm solves the inverse kinematics problem using
+gradient descent on a cost function (squared distance
+between current end-effector position and target).
+
+
+Author: Simone Palazzi
+"""
+
+from my_functions import plot_robot_arm
+from math import cos, sin
+from matplotlib import pyplot as plt
+
+
+# =============================================================
+# 1. SYSTEM PARAMETERS
+# =============================================================
+
+forearm_length = 0.30     # L1: forearm segment length (m)
+hand_length    = 0.18     # L2: hand segment length (m)
+
+target_point   = [0.35, -0.10]   # target position (x, y) in meters
+                                  # e.g. grasping an object on a table
+
+initial_angles = [0.3, 2.8]      # initial joint angles (radians)
+                                  # resting arm position
+
+tolerance      = 0.001    # stopping criterion: max allowed distance to target
+learning_rate  = 0.08     # gradient descent step size
+max_iterations = 1000     # safety limit to prevent infinite loops
+
+
+# =============================================================
+# 2. FORWARD KINEMATICS — compute end-effector (TCP) position
+# =============================================================
+
+def compute_tcp_position(angles, L1, L2):
+    """
+    Computes the (x, y) position of the end-effector
+    given joint angles and segment lengths.
+
+    Args:
+        angles: [theta1, theta2] joint angles in radians
+        L1: length of the first segment (forearm)
+        L2: length of the second segment (hand)
+
+    Returns:
+        [x, y]: end-effector position in 2D space
+    """
+    theta1, theta2 = angles
+    x = L1 * cos(theta1) + L2 * cos(theta2)
+    y = L1 * sin(theta1) + L2 * sin(theta2)
+    return [x, y]
+
+
+# =============================================================
+# 3. COST FUNCTION — squared distance from target
+# =============================================================
+
+def cost_function(angles, target, L1, L2):
+    """
+    Evaluates the cost J = squared Euclidean distance
+    between the current TCP position and the target point.
+
+    Args:
+        angles: current joint angles
+        target: [x_target, y_target]
+        L1, L2: segment lengths
+
+    Returns:
+        scalar cost value (float)
+    """
+    [x, y] = compute_tcp_position(angles, L1, L2)
+    return (x - target[0])**2 + (y - target[1])**2
+
+
+# =============================================================
+# 4. JACOBIAN — analytical partial derivatives
+# =============================================================
+
+def compute_jacobian(angles, L1, L2):
+    """
+    Computes the geometric Jacobian of the robot arm.
+    Maps joint velocities to end-effector velocities.
+
+    Returns a 2x2 matrix:
+        [[dx/dtheta1, dx/dtheta2],
+         [dy/dtheta1, dy/dtheta2]]
+    """
+    theta1, theta2 = angles
+
+    dx_dtheta1 = -L1 * sin(theta1)
+    dx_dtheta2 = -L2 * sin(theta2)
+
+    dy_dtheta1 =  L1 * cos(theta1)
+    dy_dtheta2 =  L2 * cos(theta2)
+
+    return [[dx_dtheta1, dx_dtheta2],
+            [dy_dtheta1, dy_dtheta2]]
+
+
+# =============================================================
+# 5. GRADIENT OF THE COST FUNCTION
+# =============================================================
+
+def compute_gradient(angles, target, L1, L2):
+    """
+    Computes the gradient of the cost function J
+    with respect to the joint angles [theta1, theta2].
+
+    Uses the chain rule:
+        dJ/dtheta_i = dJ/dx * dx/dtheta_i + dJ/dy * dy/dtheta_i
+
+    Args:
+        angles: current joint angles
+        target: [x_target, y_target]
+        L1, L2: segment lengths
+
+    Returns:
+        [dJ/dtheta1, dJ/dtheta2]
+    """
+    [x, y] = compute_tcp_position(angles, L1, L2)
+
+    # Partial derivatives of TCP position
+    dx_dt1 = -L1 * sin(angles[0])
+    dx_dt2 = -L2 * sin(angles[1])
+    dy_dt1 =  L1 * cos(angles[0])
+    dy_dt2 =  L2 * cos(angles[1])
+
+    # Partial derivatives of cost function
+    dJ_dx = 2 * (x - target[0])
+    dJ_dy = 2 * (y - target[1])
+
+    # Chain rule
+    grad_theta1 = dJ_dx * dx_dt1 + dJ_dy * dy_dt1
+    grad_theta2 = dJ_dx * dx_dt2 + dJ_dy * dy_dt2
+
+    return [grad_theta1, grad_theta2]
+
+
+# =============================================================
+# 6. INITIAL CONFIGURATION — plot and evaluate
+# =============================================================
+
+print("=" * 50)
+print("PLANAR 2-DOF PROSTHETIC ARM SIMULATION")
+print("=" * 50)
+print(f"\nTarget point     : {target_point} m")
+print(f"Forearm length   : {forearm_length} m")
+print(f"Hand length      : {hand_length} m")
+print(f"Initial angles   : {initial_angles} rad")
+print(f"Max reach        : {forearm_length + hand_length} m")
+
+initial_position = compute_tcp_position(initial_angles, forearm_length, hand_length)
+initial_cost     = cost_function(initial_angles, target_point, forearm_length, hand_length)
+
+print(f"\nInitial TCP position : {initial_position}")
+print(f"Initial distance²    : {initial_cost:.4f}")
+
+# Plot initial configuration
+plot_robot_arm(initial_angles, target_point, [forearm_length, hand_length])
+
+
+# =============================================================
+# 7. GRADIENT DESCENT OPTIMIZATION
+# =============================================================
+
+print("\nRunning gradient descent...")
+print("-" * 30)
+
+angles = list(initial_angles)   # working copy of angles
+cost   = initial_cost
+
+for i in range(1, max_iterations + 1):
+
+    # Compute gradient of cost function
+    grad = compute_gradient(angles, target_point, forearm_length, hand_length)
+
+    # Update joint angles
+    angles[0] -= learning_rate * grad[0]
+    angles[1] -= learning_rate * grad[1]
+
+    # Evaluate current cost
+    cost = cost_function(angles, target_point, forearm_length, hand_length)
+
+    # Check stopping criterion
+    if cost < tolerance:
+        print(f"Converged after {i} iterations")
+        break
+else:
+    print(f"Did not converge within {max_iterations} iterations")
+
+
+# =============================================================
+# 8. RESULTS — final configuration
+# =============================================================
+
+final_position = compute_tcp_position(angles, forearm_length, hand_length)
+
+print(f"\nFinal joint angles   : [{angles[0]:.4f}, {angles[1]:.4f}] rad")
+print(f"Final TCP position   : [{final_position[0]:.4f}, {final_position[1]:.4f}] m")
+print(f"Final distance²      : {cost:.6f}")
+print(f"Target reached       : {'YES ✓' if cost < tolerance else 'NO ✗'}")
+
+# Plot final configuration
+plot_robot_arm(angles, target_point, [forearm_length, hand_length])
