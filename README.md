@@ -75,4 +75,4 @@ python robotic_arm_control.py
 
 **Simone Palazzi**
 BSc Automation & Control Engineering — Politecnico di Milano
-[LinkedIn](https://www.linkedin.com/in/simone-palazzi-32215332)
+[LinkedIn](www.linkedin.com/in/simone-palazzi-322153325)
