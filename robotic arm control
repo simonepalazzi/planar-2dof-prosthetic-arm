@@ -33,7 +33,7 @@ initial_angles = [0.3, 2.8]      # initial joint angles (radians)
 
 tolerance      = 0.001    # stopping criterion: max allowed distance to target
 learning_rate  = 0.08     # gradient descent step size
-max_iterations = 1000     # safety limit to prevent infinite loops
+max_iterations = 2000     # safety limit to prevent infinite loops
 
 
 # =============================================================
